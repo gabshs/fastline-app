@@ -28,10 +28,13 @@ export type AuthView = 'login' | 'register';
 export type AdminView = 
   | 'dashboard' 
   | 'clinics' 
+  | 'service-points'
   | 'queues' 
   | 'users' 
-  | 'passwords' 
+  | 'passwords'
+  | 'devices'
   | 'tv' 
+  | 'tv-panel'
   | 'patient';
 
 // Clinic types

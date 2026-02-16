@@ -1,7 +1,10 @@
 export { AdminDashboard } from './components/AdminDashboard';
 export { ClinicsManagement } from './components/ClinicsManagement';
+export { ServicePointsManagement } from './components/ServicePointsManagement';
 export { QueuesManagement } from './components/QueuesManagement';
+export { QueuesAndServicePoints } from './components/QueuesAndServicePoints';
 export { UsersManagement } from './components/UsersManagement';
 export { PasswordsManagement } from './components/PasswordsManagement';
+export { DeviceManagement } from './components/DeviceManagement';
 export { Sidebar } from './components/Sidebar';
 export { StatCard } from './components/StatCard';

@@ -6,7 +6,8 @@ import { Label } from '@/shared/ui/label';
 
 interface RegisterScreenProps {
   onRegister: (data: {
-    name: string;
+    tenantName: string;
+    ownerName: string;
     email: string;
     password: string;
   }) => Promise<boolean>;
@@ -17,7 +18,8 @@ interface RegisterScreenProps {
 export function RegisterScreen({ onRegister, onNavigateToLogin, onNavigateBack }: RegisterScreenProps) {
   const [formData, setFormData] = useState({
     email: '',
-    name: '',
+    tenantName: '',
+    ownerName: '',
     password: '',
     confirmPassword: '',
   });
@@ -38,8 +40,12 @@ export function RegisterScreen({ onRegister, onNavigateToLogin, onNavigateBack }
       newErrors.password = 'A senha deve ter no mínimo 8 caracteres';
     }
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Nome é obrigatório';
+    if (!formData.tenantName.trim()) {
+      newErrors.tenantName = 'Nome do grupo é obrigatório';
+    }
+
+    if (!formData.ownerName.trim()) {
+      newErrors.ownerName = 'Nome do responsável é obrigatório';
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -49,7 +55,8 @@ export function RegisterScreen({ onRegister, onNavigateToLogin, onNavigateBack }
 
     setIsLoading(true);
     const success = await onRegister({
-      name: formData.name,
+      tenantName: formData.tenantName,
+      ownerName: formData.ownerName,
       email: formData.email,
       password: formData.password,
     });
@@ -82,19 +89,36 @@ export function RegisterScreen({ onRegister, onNavigateToLogin, onNavigateBack }
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="name">Nome da Clínica</Label>
+              <Label htmlFor="tenantName">Nome do grupo</Label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <Input
-                  id="name"
+                  id="tenantName"
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Clínica São Lucas"
+                  value={formData.tenantName}
+                  onChange={(e) => setFormData({ ...formData, tenantName: e.target.value })}
+                  placeholder="Grupo São Lucas"
                   className="pl-10"
                   required
                 />
-                {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+                {errors.tenantName && <p className="text-red-500 text-sm mt-1">{errors.tenantName}</p>}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="ownerName">Nome do responsável</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Input
+                  id="ownerName"
+                  type="text"
+                  value={formData.ownerName}
+                  onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                  placeholder="Dr. João Silva"
+                  className="pl-10"
+                  required
+                />
+                {errors.ownerName && <p className="text-red-500 text-sm mt-1">{errors.ownerName}</p>}
               </div>
             </div>
 

@@ -32,6 +32,8 @@ export const ROUTES = {
   QUEUES: 'queues',
   USERS: 'users',
   PASSWORDS: 'passwords',
+  DEVICES: 'devices',
   TV: 'tv',
+  TV_PANEL: 'tv-panel',
   PATIENT: 'patient',
 } as const;

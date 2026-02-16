@@ -18,7 +18,7 @@ class AuthService {
    * Register a new tenant (clinic)
    */
   async signup(data: SignupRequest): Promise<User> {
-    const response = await apiClient.post<SignupResponse>(
+    await apiClient.post<SignupResponse>(
       API_ENDPOINTS.SIGNUP,
       data,
       {},
@@ -27,9 +27,9 @@ class AuthService {
 
     // Return user data
     return {
-      email: response.email,
-      ownerName: response.name,
-      tenantName: response.name,
+      email: data.email,
+      ownerName: data.ownerName,
+      tenantName: data.tenantName,
     };
   }
 
@@ -47,15 +47,15 @@ class AuthService {
     );
 
     // Store tokens
-    localStorage.setItem(API_CONFIG.TOKEN_KEY, response.access_token);
-    localStorage.setItem(API_CONFIG.TENANT_ID_KEY, response.tenant_id);
-    localStorage.setItem(API_CONFIG.USER_ID_KEY, response.user_id);
+    localStorage.setItem(API_CONFIG.TOKEN_KEY, response.accessToken);
+    localStorage.setItem(API_CONFIG.TENANT_ID_KEY, response.tenantId);
+    localStorage.setItem(API_CONFIG.USER_ID_KEY, response.userId);
 
     // Get user data (for now, store email only, could fetch more from API later)
     const user: User = {
       email,
       ownerName: email.split('@')[0], // Extract name from email for now
-      tenantName: response.tenant_id,
+      tenantName: response.tenantId,
     };
 
     // Save current user

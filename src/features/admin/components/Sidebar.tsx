@@ -1,4 +1,4 @@
-import { Building2, Users, ListOrdered, Key, LayoutDashboard, Tv, User, LogOut } from 'lucide-react';
+import { Building2, Users, ListOrdered, Key, LayoutDashboard, Tv, User, LogOut, Monitor } from 'lucide-react';
 
 interface SidebarProps {
   activeView: string;
@@ -12,9 +12,10 @@ export function Sidebar({ activeView, onViewChange, onLogout, userName, tenantNa
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'clinics', label: 'Clínicas', icon: Building2 },
-    { id: 'queues', label: 'Filas', icon: ListOrdered },
+    { id: 'queues', label: 'Filas e Atendimento', icon: ListOrdered },
     { id: 'users', label: 'Usuários', icon: Users },
     { id: 'passwords', label: 'Gestão de Senhas', icon: Key },
+    { id: 'devices', label: 'Dispositivos', icon: Monitor },
     { id: 'tv', label: 'Painel TV', icon: Tv },
     { id: 'patient', label: 'App Paciente', icon: User },
   ];

@@ -4,19 +4,61 @@ import { LoginScreen, RegisterScreen } from '@/features/auth';
 import {
   AdminDashboard,
   ClinicsManagement,
-  QueuesManagement,
+  QueuesAndServicePoints,
   UsersManagement,
   PasswordsManagement,
+  DeviceManagement,
   Sidebar,
 } from '@/features/admin';
 import { TVPanel } from '@/features/tv';
+import { TVPanelPage } from '@/features/tv-panel/pages/TVPanelPage';
 import { PatientApp } from '@/features/patient';
 import { LandingPage } from '@/features/landing';
 import type { AdminView } from '@/types';
 
 export default function App() {
+  console.log('🏁 App component rendering');
   const [showLanding, setShowLanding] = useState(true);
   
+  // Check URL hash for public routes (workaround for routing issues)
+  const urlPath = window.location.pathname;
+  const isPublicRoute = urlPath === '/tv-panel' || urlPath === '/patient';
+  
+  console.log('🔎 Checking URL:', urlPath, 'isPublicRoute:', isPublicRoute);
+  
+  // If it's a public route, render it directly without navigation hook
+  if (isPublicRoute) {
+    console.log('✅ Direct public route detected:', urlPath);
+    if (urlPath === '/tv-panel') {
+      return <TVPanelPage />;
+    }
+    if (urlPath === '/patient') {
+      return <PatientApp />;
+    }
+  }
+  
+  // Get navigation state for authenticated routes
+  const { activeView, navigateTo, resetNavigation } = useNavigation();
+  console.log('📱 App activeView:', activeView);
+
+  // Double-check for public routes via activeView
+  if (activeView === 'tv-panel' || activeView === 'patient') {
+    console.log('✅ Public route detected via activeView:', activeView);
+    const renderPublicView = () => {
+      switch (activeView) {
+        case 'tv-panel':
+          return <TVPanelPage />;
+        case 'patient':
+          return <PatientApp />;
+        default:
+          return null;
+      }
+    };
+    return <div>{renderPublicView()}</div>;
+  }
+
+  console.log('🔐 Not a public route, checking auth...');
+  // Only run auth hooks if NOT on public routes
   const {
     isAuthenticated,
     currentUser,
@@ -27,8 +69,6 @@ export default function App() {
     logout,
     switchAuthView,
   } = useAuth();
-
-  const { activeView, navigateTo, resetNavigation } = useNavigation();
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -83,22 +123,23 @@ export default function App() {
       case 'clinics':
         return <ClinicsManagement />;
       case 'queues':
-        return <QueuesManagement />;
+      case 'service-points':
+        return <QueuesAndServicePoints />;
       case 'users':
         return <UsersManagement />;
       case 'passwords':
         return <PasswordsManagement />;
+      case 'devices':
+        return <DeviceManagement />;
       case 'tv':
         return <TVPanel />;
-      case 'patient':
-        return <PatientApp />;
       default:
         return <AdminDashboard />;
     }
   };
 
-  // Full-screen views (TV and Patient)
-  if (activeView === 'tv' || activeView === 'patient') {
+  // Full-screen view for TV (legacy - authenticated)
+  if (activeView === 'tv') {
     return <div>{renderView()}</div>;
   }
 
