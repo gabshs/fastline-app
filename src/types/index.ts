@@ -3,6 +3,7 @@ export interface User {
   email: string;
   ownerName: string;
   tenantName: string;
+  roleKey?: string;
 }
 
 export interface UserCredentials extends User {
@@ -28,10 +29,13 @@ export type AuthView = 'login' | 'register';
 export type AdminView = 
   | 'dashboard' 
   | 'clinics' 
+  | 'service-points'
   | 'queues' 
   | 'users' 
-  | 'passwords' 
+  | 'passwords'
+  | 'devices'
   | 'tv' 
+  | 'tv-panel'
   | 'patient';
 
 // Clinic types

@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { useAuth, useNavigation } from '@/hooks';
+import { useState, useEffect } from 'react';
+import { useAuth, useNavigation, useTokenRefresh } from '@/hooks';
 import { LoginScreen, RegisterScreen } from '@/features/auth';
 import {
   AdminDashboard,
   ClinicsManagement,
-  QueuesManagement,
+  QueuesAndServicePoints,
   UsersManagement,
   PasswordsManagement,
+  DeviceManagement,
   Sidebar,
 } from '@/features/admin';
 import { TVPanel } from '@/features/tv';
+import { TVPanelPage } from '@/features/tv-panel/pages/TVPanelPage';
 import { PatientApp } from '@/features/patient';
 import { LandingPage } from '@/features/landing';
 import type { AdminView } from '@/types';
@@ -17,6 +19,42 @@ import type { AdminView } from '@/types';
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   
+  // Enable automatic token refresh
+  useTokenRefresh();
+  
+  // Check URL hash for public routes (workaround for routing issues)
+  const urlPath = window.location.pathname;
+  const isPublicRoute = urlPath === '/tv-panel' || urlPath === '/patient';
+  
+  // If it's a public route, render it directly without navigation hook
+  if (isPublicRoute) {
+    if (urlPath === '/tv-panel') {
+      return <TVPanelPage />;
+    }
+    if (urlPath === '/patient') {
+      return <PatientApp />;
+    }
+  }
+  
+  // Get navigation state for authenticated routes
+  const { activeView, navigateTo, resetNavigation } = useNavigation();
+
+  // Double-check for public routes via activeView
+  if (activeView === 'tv-panel' || activeView === 'patient') {
+    const renderPublicView = () => {
+      switch (activeView) {
+        case 'tv-panel':
+          return <TVPanelPage />;
+        case 'patient':
+          return <PatientApp />;
+        default:
+          return null;
+      }
+    };
+    return <div>{renderPublicView()}</div>;
+  }
+
+  // Only run auth hooks if NOT on public routes
   const {
     isAuthenticated,
     currentUser,
@@ -28,7 +66,22 @@ export default function App() {
     switchAuthView,
   } = useAuth();
 
-  const { activeView, navigateTo, resetNavigation } = useNavigation();
+  // Redirecionar usuários STAFF para Gestão de Senhas após login
+  const [hasRedirected, setHasRedirected] = useState(false);
+  
+  useEffect(() => {
+    if (isAuthenticated && currentUser && !hasRedirected) {
+      if (currentUser.roleKey === 'STAFF') {
+        navigateTo('passwords');
+      }
+      setHasRedirected(true);
+    }
+    
+    // Reset flag quando usuário faz logout
+    if (!isAuthenticated) {
+      setHasRedirected(false);
+    }
+  }, [isAuthenticated, currentUser, hasRedirected, navigateTo]);
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -83,22 +136,23 @@ export default function App() {
       case 'clinics':
         return <ClinicsManagement />;
       case 'queues':
-        return <QueuesManagement />;
+      case 'service-points':
+        return <QueuesAndServicePoints />;
       case 'users':
         return <UsersManagement />;
       case 'passwords':
         return <PasswordsManagement />;
+      case 'devices':
+        return <DeviceManagement />;
       case 'tv':
         return <TVPanel />;
-      case 'patient':
-        return <PatientApp />;
       default:
         return <AdminDashboard />;
     }
   };
 
-  // Full-screen views (TV and Patient)
-  if (activeView === 'tv' || activeView === 'patient') {
+  // Full-screen view for TV (legacy - authenticated)
+  if (activeView === 'tv') {
     return <div>{renderView()}</div>;
   }
 
@@ -109,15 +163,16 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       <Sidebar
         activeView={activeView}
         onViewChange={(view) => navigateTo(view as AdminView)}
         onLogout={handleLogout}
         userName={currentUser?.ownerName}
         tenantName={currentUser?.tenantName}
+        userRole={currentUser?.roleKey}
       />
-      <div className="flex-1">{renderView()}</div>
+      <div className="ml-72">{renderView()}</div>
     </div>
   );
 }

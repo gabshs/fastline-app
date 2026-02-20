@@ -45,6 +45,23 @@ export function useClinics() {
     }
   }, [loadClinics]);
 
+  const updateClinic = useCallback(async (id: string, data: CreateClinicRequest): Promise<boolean> => {
+    try {
+      await clinicService.updateClinic(id, data);
+      toast.success('Clínica atualizada com sucesso!');
+      
+      // Reload clinics list
+      await loadClinics();
+      return true;
+    } catch (err) {
+      const message = err instanceof ApiError 
+        ? err.message 
+        : 'Erro ao atualizar clínica';
+      toast.error(message);
+      return false;
+    }
+  }, [loadClinics]);
+
   const deleteClinic = useCallback(async (id: string): Promise<boolean> => {
     try {
       await clinicService.deleteClinic(id);
@@ -64,8 +81,37 @@ export function useClinics() {
 
   // Load clinics on mount
   useEffect(() => {
-    loadClinics();
-  }, [loadClinics]);
+    let isMounted = true;
+
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await clinicService.listClinics();
+        if (isMounted) {
+          setClinics(data);
+        }
+      } catch (err) {
+        if (isMounted) {
+          const message = err instanceof ApiError 
+            ? err.message 
+            : 'Erro ao carregar clínicas';
+          setError(message);
+          toast.error(message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return {
     clinics,
@@ -73,6 +119,7 @@ export function useClinics() {
     error,
     loadClinics,
     createClinic,
+    updateClinic,
     deleteClinic,
   };
 }

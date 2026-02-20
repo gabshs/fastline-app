@@ -49,7 +49,15 @@ class ApiClient {
     // Handle 401 Unauthorized - token expired or invalid
     if (response.status === 401) {
       this.clearAuth();
-      window.location.href = '/login';
+      
+      // Don't redirect to login if we're on a public route
+      const currentPath = window.location.pathname;
+      const isPublicRoute = currentPath === '/tv-panel' || currentPath === '/patient';
+      
+      if (!isPublicRoute) {
+        window.location.href = '/login';
+      }
+      
       throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
     }
 
@@ -101,6 +109,83 @@ class ApiClient {
   }
 
   /**
+   * GET request without authentication (for public routes like device snapshot)
+   */
+  async getPublic<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        ...options,
+      });
+
+      // For public routes, don't redirect on 401
+      if (response.status === 401) {
+        const data = await response.json().catch(() => ({}));
+        throw new ApiError(401, data?.error || 'Unauthorized', data?.code);
+      }
+
+      return await this.handleResponse<T>(response);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(408, 'Request timeout');
+      }
+      const message = error instanceof Error ? error.message : 'Network error';
+      throw new ApiError(0, message);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * POST request without authentication (for public routes like device pairing)
+   */
+  async postPublic<T>(
+    endpoint: string,
+    body?: unknown,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+        ...options,
+      });
+
+      // For public routes, don't redirect on 401
+      if (response.status === 401) {
+        const data = await response.json().catch(() => ({}));
+        throw new ApiError(401, data?.error || 'Unauthorized', data?.code);
+      }
+
+      return await this.handleResponse<T>(response);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(408, 'Request timeout');
+      }
+      const message = error instanceof Error ? error.message : 'Network error';
+      throw new ApiError(0, message);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
    * POST request
    */
   async post<T>(
@@ -115,13 +200,6 @@ class ApiClient {
     try {
       const url = `${this.baseURL}${endpoint}`;
       const headers = this.getHeaders(includeAuth);
-      
-      console.log('API POST Request:', {
-        url,
-        method: 'POST',
-        headers,
-        body,
-      });
 
       const response = await fetch(url, {
         method: 'POST',
@@ -131,12 +209,6 @@ class ApiClient {
         mode: 'cors',
         credentials: 'omit',
         ...options,
-      });
-
-      console.log('API Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
       });
 
       return await this.handleResponse<T>(response);
@@ -189,7 +261,10 @@ class ApiClient {
   /**
    * DELETE request
    */
-  async delete<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async delete<T = void>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 

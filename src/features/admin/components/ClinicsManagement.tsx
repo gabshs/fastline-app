@@ -1,67 +1,92 @@
 import { useState } from 'react';
-import { Building2, Plus, Edit, Trash2, MapPin, Phone } from 'lucide-react';
+import { Building2, Plus, Edit, Trash2, MapPin, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog';
 import { Label } from '@/shared/ui/label';
-
-interface Clinic {
-  id: string;
-  name: string;
-  address: string;
-  phone: string;
-  queues: number;
-  status: 'active' | 'inactive';
-}
+import { useClinics } from '@/hooks/useClinics';
 
 export function ClinicsManagement() {
-  const [clinics, setClinics] = useState<Clinic[]>([
-    {
-      id: '1',
-      name: 'Clínica São Paulo',
-      address: 'Av. Paulista, 1000 - São Paulo, SP',
-      phone: '(11) 3333-4444',
-      queues: 5,
-      status: 'active',
-    },
-    {
-      id: '2',
-      name: 'Clínica Rio de Janeiro',
-      address: 'Av. Atlântica, 500 - Rio de Janeiro, RJ',
-      phone: '(21) 2222-3333',
-      queues: 3,
-      status: 'active',
-    },
-    {
-      id: '3',
-      name: 'Clínica Belo Horizonte',
-      address: 'Av. Afonso Pena, 200 - Belo Horizonte, MG',
-      phone: '(31) 3333-5555',
-      queues: 4,
-      status: 'active',
-    },
-  ]);
+  const { clinics, isLoading, createClinic, updateClinic, deleteClinic } = useClinics();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedClinic, setSelectedClinic] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    address: '',
-    phone: '',
+    timezone: 'America/Sao_Paulo',
+    addressLine: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newClinic: Clinic = {
-      id: String(clinics.length + 1),
+    setIsSubmitting(true);
+    
+    const success = await createClinic({
       name: formData.name,
-      address: formData.address,
-      phone: formData.phone,
-      queues: 0,
-      status: 'active',
-    };
-    setClinics([...clinics, newClinic]);
-    setFormData({ name: '', address: '', phone: '' });
-    setIsDialogOpen(false);
+      timezone: formData.timezone,
+      addressLine: formData.addressLine || undefined,
+    });
+    
+    setIsSubmitting(false);
+    
+    if (success) {
+      setFormData({ name: '', timezone: 'America/Sao_Paulo', addressLine: '' });
+      setIsDialogOpen(false);
+    }
+  };
+
+  const handleEdit = (clinic: typeof clinics[0]) => {
+    setSelectedClinic({ id: clinic.id, name: clinic.name });
+    setFormData({
+      name: clinic.name,
+      timezone: clinic.timezone,
+      addressLine: clinic.addressLine || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClinic) return;
+    
+    setIsSubmitting(true);
+    
+    const success = await updateClinic(selectedClinic.id, {
+      name: formData.name,
+      timezone: formData.timezone,
+      addressLine: formData.addressLine || undefined,
+    });
+    
+    setIsSubmitting(false);
+    
+    if (success) {
+      setFormData({ name: '', timezone: 'America/Sao_Paulo', addressLine: '' });
+      setSelectedClinic(null);
+      setIsEditDialogOpen(false);
+    }
+  };
+
+  const handleDeleteClick = (clinic: typeof clinics[0]) => {
+    setSelectedClinic({ id: clinic.id, name: clinic.name });
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedClinic) return;
+    
+    setIsSubmitting(true);
+    
+    const success = await deleteClinic(selectedClinic.id);
+    
+    setIsSubmitting(false);
+    
+    if (success) {
+      setSelectedClinic(null);
+      setIsDeleteDialogOpen(false);
+    }
   };
 
   return (
@@ -94,95 +119,219 @@ export function ClinicsManagement() {
                 />
               </div>
               <div>
-                <Label htmlFor="address">Endereço</Label>
+                <Label htmlFor="timezone">Fuso Horário</Label>
                 <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Ex: Av. Paulista, 1000"
+                  id="timezone"
+                  value={formData.timezone}
+                  onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                  placeholder="America/Sao_Paulo"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="phone">Telefone</Label>
+                <Label htmlFor="addressLine">Endereço (opcional)</Label>
                 <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="(11) 3333-4444"
-                  required
+                  id="addressLine"
+                  value={formData.addressLine}
+                  onChange={(e) => setFormData({ ...formData, addressLine: e.target.value })}
+                  placeholder="Ex: Av. Paulista, 1000"
                 />
               </div>
-              <Button type="submit" className="w-full">Cadastrar Clínica</Button>
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cadastrando...
+                  </>
+                ) : (
+                  'Cadastrar Clínica'
+                )}
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
       <div className="bg-white rounded-lg shadow">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm text-gray-600">Clínica</th>
-                <th className="px-6 py-3 text-left text-sm text-gray-600">Endereço</th>
-                <th className="px-6 py-3 text-left text-sm text-gray-600">Telefone</th>
-                <th className="px-6 py-3 text-left text-sm text-gray-600">Filas</th>
-                <th className="px-6 py-3 text-left text-sm text-gray-600">Status</th>
-                <th className="px-6 py-3 text-left text-sm text-gray-600">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {clinics.map((clinic) => (
-                <tr key={clinic.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-blue-100 p-2 rounded-lg">
-                        <Building2 className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <span className="font-medium">{clinic.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <MapPin className="w-4 h-4" />
-                      <span className="text-sm">{clinic.address}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <Phone className="w-4 h-4" />
-                      <span className="text-sm">{clinic.phone}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm">{clinic.queues} filas</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-sm ${
-                      clinic.status === 'active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {clinic.status === 'active' ? 'Ativa' : 'Inativa'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <Edit className="w-4 h-4 text-gray-600" />
-                      </button>
-                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </div>
-                  </td>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          </div>
+        ) : clinics.length === 0 ? (
+          <div className="text-center py-12">
+            <Building2 className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+            <p className="text-gray-600">Nenhuma clínica cadastrada</p>
+            <p className="text-sm text-gray-500 mt-2">Clique em "Nova Clínica" para começar</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm text-gray-600">Clínica</th>
+                  <th className="px-6 py-3 text-left text-sm text-gray-600">Endereço</th>
+                  <th className="px-6 py-3 text-left text-sm text-gray-600">Fuso Horário</th>
+                  <th className="px-6 py-3 text-left text-sm text-gray-600">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {clinics.map((clinic) => (
+                  <tr key={clinic.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-blue-100 p-2 rounded-lg">
+                          <Building2 className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <span className="font-medium">{clinic.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2 text-gray-600">
+                        <MapPin className="w-4 h-4" />
+                        <span className="text-sm">{clinic.addressLine || 'Não informado'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2 text-gray-600">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-sm">{clinic.timezone}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleEdit(clinic)}
+                          className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Editar clínica"
+                        >
+                          <Edit className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteClick(clinic)}
+                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Excluir clínica"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Clínica</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="edit-name">Nome da Clínica</Label>
+              <Input
+                id="edit-name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Ex: Clínica São Paulo"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-timezone">Fuso Horário</Label>
+              <Input
+                id="edit-timezone"
+                value={formData.timezone}
+                onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                placeholder="America/Sao_Paulo"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-addressLine">Endereço (opcional)</Label>
+              <Input
+                id="edit-addressLine"
+                value={formData.addressLine}
+                onChange={(e) => setFormData({ ...formData, addressLine: e.target.value })}
+                placeholder="Ex: Av. Paulista, 1000"
+              />
+            </div>
+            <div className="flex space-x-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setFormData({ name: '', timezone: 'America/Sao_Paulo', addressLine: '' });
+                  setSelectedClinic(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar Alterações'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-gray-600">
+              Tem certeza que deseja excluir a clínica <strong>{selectedClinic?.name}</strong>?
+            </p>
+            <p className="text-sm text-red-600">
+              Esta ação não pode ser desfeita. Todas as filas e dados associados a esta clínica serão perdidos.
+            </p>
+            <div className="flex space-x-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setIsDeleteDialogOpen(false);
+                  setSelectedClinic(null);
+                }}
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="button" 
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={handleDeleteConfirm}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  'Excluir Clínica'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
