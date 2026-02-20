@@ -200,13 +200,6 @@ class ApiClient {
     try {
       const url = `${this.baseURL}${endpoint}`;
       const headers = this.getHeaders(includeAuth);
-      
-      console.log('API POST Request:', {
-        url,
-        method: 'POST',
-        headers,
-        body,
-      });
 
       const response = await fetch(url, {
         method: 'POST',
@@ -216,12 +209,6 @@ class ApiClient {
         mode: 'cors',
         credentials: 'omit',
         ...options,
-      });
-
-      console.log('API Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
       });
 
       return await this.handleResponse<T>(response);

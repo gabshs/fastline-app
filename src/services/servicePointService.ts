@@ -59,6 +59,19 @@ class ServicePointService {
       { priority }
     );
   }
+
+  /**
+   * Get queues bound to a service point
+   */
+  async getServicePointQueues(
+    clinicId: string,
+    servicePointId: string
+  ): Promise<string[]> {
+    const response = await apiClient.get<{ queues: Array<{ queueId: string; priority: number }> }>(
+      `/v1/clinics/${clinicId}/service-points/${servicePointId}/queues`
+    );
+    return response.queues.map(q => q.queueId);
+  }
 }
 
 // Export singleton instance

@@ -47,21 +47,20 @@ class ClinicService {
   }
 
   /**
-   * Update a clinic (placeholder - implement when API supports it)
+   * Update a clinic
    */
   async updateClinic(id: string, data: Partial<CreateClinicRequest>): Promise<void> {
-    // TODO: Implement when API provides PUT /v1/clinics/:id
-    console.warn('Update clinic not implemented in API yet', id, data);
-    throw new Error('Update clinic not implemented in API yet');
+    await apiClient.put(
+      `${API_ENDPOINTS.CLINICS}/${id}`,
+      data
+    );
   }
 
   /**
-   * Delete a clinic (placeholder - implement when API supports it)
+   * Delete a clinic
    */
   async deleteClinic(id: string): Promise<void> {
-    // TODO: Implement when API provides DELETE /v1/clinics/:id
-    console.warn('Delete clinic not implemented in API yet', id);
-    throw new Error('Delete clinic not implemented in API yet');
+    await apiClient.delete(`${API_ENDPOINTS.CLINICS}/${id}`);
   }
 }
 

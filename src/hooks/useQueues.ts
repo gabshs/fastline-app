@@ -57,8 +57,42 @@ export function useQueues(clinicId: string | null) {
 
   // Load queues when clinicId changes
   useEffect(() => {
-    loadQueues();
-  }, [loadQueues]);
+    if (!clinicId) {
+      setQueues([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await queueService.listQueues(clinicId);
+        if (isMounted) {
+          setQueues(data);
+        }
+      } catch (err) {
+        if (isMounted) {
+          const message = err instanceof ApiError 
+            ? err.message 
+            : 'Erro ao carregar filas';
+          setError(message);
+          toast.error(message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clinicId]);
 
   return {
     queues,

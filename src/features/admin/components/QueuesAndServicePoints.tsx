@@ -10,7 +10,7 @@ import { Label } from '@/shared/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import { useClinics, useServicePoints, useQueues } from '@/hooks';
-import { servicePointService } from '@/services';
+import { servicePointService, servicePointStaffService, type StaffMember } from '@/services';
 import { toast } from 'sonner';
 
 const SERVICE_POINT_TYPES = [
@@ -49,6 +49,13 @@ export function QueuesAndServicePoints() {
   const [selectedServicePointId, setSelectedServicePointId] = useState<string | null>(null);
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<string>>(new Set());
   const [isBinding, setIsBinding] = useState(false);
+
+  // Staff management
+  const [staffDialogOpen, setStaffDialogOpen] = useState(false);
+  const [availableStaff, setAvailableStaff] = useState<StaffMember[]>([]);
+  const [assignedStaff, setAssignedStaff] = useState<StaffMember[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
 
   const selectedClinic = clinics.find(c => c.id === selectedClinicId);
 
@@ -119,6 +126,48 @@ export function QueuesAndServicePoints() {
       newSet.add(queueId);
     }
     setSelectedQueueIds(newSet);
+  };
+
+  const handleAssignStaff = async () => {
+    if (!selectedServicePointId || !selectedStaffId) {
+      toast.error('Selecione um atendente');
+      return;
+    }
+
+    try {
+      await servicePointStaffService.assignStaff(selectedServicePointId, selectedStaffId);
+      toast.success('Atendente vinculado com sucesso!');
+      
+      // Atualizar listas
+      const [available, assigned] = await Promise.all([
+        servicePointStaffService.getAvailableStaff(),
+        servicePointStaffService.getServicePointStaff(selectedServicePointId)
+      ]);
+      setAvailableStaff(available);
+      setAssignedStaff(assigned);
+      setSelectedStaffId('');
+    } catch (error) {
+      toast.error('Erro ao vincular atendente');
+    }
+  };
+
+  const handleRemoveStaff = async (userId: string) => {
+    if (!selectedServicePointId) return;
+
+    try {
+      await servicePointStaffService.removeStaff(selectedServicePointId, userId);
+      toast.success('Atendente removido com sucesso!');
+      
+      // Atualizar listas
+      const [available, assigned] = await Promise.all([
+        servicePointStaffService.getAvailableStaff(),
+        servicePointStaffService.getServicePointStaff(selectedServicePointId)
+      ]);
+      setAvailableStaff(available);
+      setAssignedStaff(assigned);
+    } catch (error) {
+      toast.error('Erro ao remover atendente');
+    }
   };
 
   const getTypeIcon = (type: string) => {
@@ -414,26 +463,70 @@ export function QueuesAndServicePoints() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            point.isActive
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {point.isActive ? 'Ativo' : 'Inativo'}
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedServicePointId(point.id);
-                              setSelectedQueueIds(new Set());
-                              setBindDialogOpen(true);
-                            }}
-                            disabled={queues.length === 0}
-                          >
-                            Vincular Filas
-                          </Button>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              point.isActive
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {point.isActive ? 'Ativo' : 'Inativo'}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                setSelectedServicePointId(point.id);
+                                setBindDialogOpen(true);
+                                
+                                // Carregar filas já vinculadas
+                                if (selectedClinicId) {
+                                  try {
+                                    const boundQueueIds = await servicePointService.getServicePointQueues(
+                                      selectedClinicId,
+                                      point.id
+                                    );
+                                    setSelectedQueueIds(new Set(boundQueueIds));
+                                  } catch (error) {
+                                    console.error('Error loading bound queues:', error);
+                                    setSelectedQueueIds(new Set());
+                                  }
+                                }
+                              }}
+                              disabled={queues.length === 0}
+                              className="flex-1"
+                            >
+                              <ListOrdered className="w-4 h-4 mr-1" />
+                              Filas
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                setSelectedServicePointId(point.id);
+                                setIsLoadingStaff(true);
+                                setStaffDialogOpen(true);
+                                try {
+                                  const [available, assigned] = await Promise.all([
+                                    servicePointStaffService.getAvailableStaff(),
+                                    servicePointStaffService.getServicePointStaff(point.id)
+                                  ]);
+                                  setAvailableStaff(available);
+                                  setAssignedStaff(assigned);
+                                } catch (error) {
+                                  toast.error('Erro ao carregar atendentes');
+                                } finally {
+                                  setIsLoadingStaff(false);
+                                }
+                              }}
+                              className="flex-1"
+                            >
+                              <Users className="w-4 h-4 mr-1" />
+                              Atendentes
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -492,6 +585,91 @@ export function QueuesAndServicePoints() {
                     `Vincular ${selectedQueueIds.size} ${selectedQueueIds.size === 1 ? 'fila' : 'filas'}`
                   )}
                 </Button>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Management Dialog */}
+      <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Atendentes do Ponto de Atendimento</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-6">
+            {isLoadingStaff ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              </div>
+            ) : (
+              <>
+                {/* Assigned Staff */}
+                <div>
+                  <h4 className="font-medium mb-3">Atendentes Vinculados</h4>
+                  {assignedStaff.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4 border rounded-lg">
+                      Nenhum atendente vinculado a este ponto
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {assignedStaff.map((staff) => (
+                        <div
+                          key={staff.userId}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
+                          <div>
+                            <p className="font-medium">{staff.name}</p>
+                            <p className="text-sm text-gray-500">{staff.email}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRemoveStaff(staff.userId)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            Remover
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add Staff */}
+                <div>
+                  <h4 className="font-medium mb-3">Vincular Novo Atendente</h4>
+                  {assignedStaff.length >= 1 ? (
+                    <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                      Este ponto já possui um atendente vinculado. Remova o atendente atual para vincular outro.
+                    </p>
+                  ) : availableStaff.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4 border rounded-lg">
+                      Nenhum atendente disponível para vincular
+                    </p>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecione um atendente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableStaff.map((staff) => (
+                            <SelectItem key={staff.userId} value={staff.userId}>
+                              {staff.name} - {staff.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={handleAssignStaff}
+                        disabled={!selectedStaffId}
+                      >
+                        Vincular
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>

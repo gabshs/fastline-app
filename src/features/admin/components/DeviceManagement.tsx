@@ -5,9 +5,9 @@ import type { CreateDeviceResponse } from '@/types/api';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/shared/ui/alert-dialog';
-import { Tv, Copy, Check, Loader2, ExternalLink, Monitor, Calendar, Plus, Trash2 } from 'lucide-react';
+import { Tv, Copy, Check, Loader2, ExternalLink, Monitor, Calendar, Plus, Trash2, ListOrdered } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,10 +24,14 @@ export function DeviceManagement() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isQueueDialogOpen, setIsQueueDialogOpen] = useState(false);
   const [selectedDeviceForQueues, setSelectedDeviceForQueues] = useState<string | null>(null);
+  const [selectedDeviceName, setSelectedDeviceName] = useState<string>('');
   const [selectedQueueIds, setSelectedQueueIds] = useState<string[]>([]);
   const [isSavingQueues, setIsSavingQueues] = useState(false);
   const [deviceToDelete, setDeviceToDelete] = useState<{ id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deviceToUnpair, setDeviceToUnpair] = useState<{ id: string; name: string } | null>(null);
+  const [isUnpairing, setIsUnpairing] = useState(false);
+  const [isRegeneratingCode, setIsRegeneratingCode] = useState<string | null>(null);
 
   const selectedClinic = clinics.find(c => c.id === selectedClinicId);
 
@@ -91,11 +95,12 @@ export function DeviceManagement() {
   };
 
   const toggleQueue = (queueId: string) => {
-    setSelectedQueueIds(prev =>
-      prev.includes(queueId)
-        ? prev.filter(id => id !== queueId)
-        : [...prev, queueId]
-    );
+    setSelectedQueueIds(prev => {
+      const current = prev || [];
+      return current.includes(queueId)
+        ? current.filter(id => id !== queueId)
+        : [...current, queueId];
+    });
   };
 
   const handleDeleteDevice = async () => {
@@ -112,6 +117,39 @@ export function DeviceManagement() {
       console.error(err);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleUnpairDevice = async () => {
+    if (!selectedClinicId || !deviceToUnpair) return;
+
+    setIsUnpairing(true);
+    try {
+      await deviceService.unpairDevice(selectedClinicId, deviceToUnpair.id);
+      toast.success('Dispositivo desvinculado com sucesso!');
+      setDeviceToUnpair(null);
+      reloadDevices();
+    } catch (err) {
+      toast.error('Erro ao desvincular dispositivo');
+      console.error(err);
+    } finally {
+      setIsUnpairing(false);
+    }
+  };
+
+  const handleRegenerateCode = async (deviceId: string) => {
+    if (!selectedClinicId) return;
+
+    setIsRegeneratingCode(deviceId);
+    try {
+      const newCode = await deviceService.regeneratePairingCode(selectedClinicId, deviceId);
+      toast.success(`Novo código gerado: ${newCode}`);
+      reloadDevices();
+    } catch (err) {
+      toast.error('Erro ao gerar novo código');
+      console.error(err);
+    } finally {
+      setIsRegeneratingCode(null);
     }
   };
 
@@ -306,6 +344,7 @@ export function DeviceManagement() {
                         setIsCreateDialogOpen(false);
                         if (createdDevice) {
                           setSelectedDeviceForQueues(createdDevice.deviceId);
+                          setSelectedDeviceName(deviceName);
                           setIsQueueDialogOpen(true);
                         }
                       }} 
@@ -381,11 +420,11 @@ export function DeviceManagement() {
                     )}
                   </div>
 
-                  {device.pairingCode && (
-                    <div className="mt-3 pt-3 border-t">
-                      <p className="text-xs text-gray-500 mb-1">Código de emparelhamento:</p>
+                  {device.status === 'PENDING' && device.pairingCode && (
+                    <div className="mt-3 pt-3 border-t bg-yellow-50 -mx-4 -mb-4 px-4 pb-4 rounded-b-lg">
+                      <p className="text-xs font-semibold text-yellow-800 mb-2 mt-2">Código de Emparelhamento:</p>
                       <div className="flex items-center space-x-2">
-                        <code className="flex-1 bg-gray-100 px-2 py-1 rounded text-sm font-mono">
+                        <code className="flex-1 bg-white border-2 border-yellow-300 px-3 py-2 rounded text-base font-mono font-bold text-yellow-900">
                           {device.pairingCode}
                         </code>
                         <Button
@@ -395,26 +434,73 @@ export function DeviceManagement() {
                             navigator.clipboard.writeText(device.pairingCode!);
                             toast.success('Código copiado!');
                           }}
+                          className="border-yellow-300 hover:bg-yellow-100"
                         >
                           <Copy className="w-3 h-3" />
                         </Button>
                       </div>
+                      <p className="text-xs text-yellow-700 mt-2 mb-2">
+                        Use este código para emparelhar o dispositivo
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRegenerateCode(device.id)}
+                        disabled={isRegeneratingCode === device.id}
+                        className="w-full border-yellow-300 hover:bg-yellow-100 text-yellow-800"
+                      >
+                        {isRegeneratingCode === device.id ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                            Gerando...
+                          </>
+                        ) : (
+                          'Gerar Novo Código'
+                        )}
+                      </Button>
                     </div>
                   )}
 
                   <div className="mt-3 pt-3 border-t space-y-2">
                     {device.status === 'PAIRED' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => {
-                          setSelectedDeviceForQueues(device.id);
-                          setIsQueueDialogOpen(true);
-                        }}
-                      >
-                        Configurar Filas
-                      </Button>
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={async () => {
+                            setSelectedDeviceForQueues(device.id);
+                            setSelectedDeviceName(device.name);
+                            setIsQueueDialogOpen(true);
+                            
+                            // Carregar filas já vinculadas
+                            if (selectedClinicId) {
+                              try {
+                                const queueIds = await deviceService.getDeviceQueues(
+                                  selectedClinicId,
+                                  device.id
+                                );
+                                setSelectedQueueIds(queueIds);
+                              } catch (error) {
+                                console.error('Error loading device queues:', error);
+                                setSelectedQueueIds([]);
+                              }
+                            }
+                          }}
+                        >
+                          <ListOrdered className="w-4 h-4 mr-1" />
+                          Filas
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                          onClick={() => setDeviceToUnpair({ id: device.id, name: device.name })}
+                        >
+                          <ExternalLink className="w-3 h-3 mr-2" />
+                          Desvincular
+                        </Button>
+                      </>
                     )}
                     <Button
                       variant="outline"
@@ -432,6 +518,38 @@ export function DeviceManagement() {
           )}
         </div>
       )}
+
+      {/* Unpair Confirmation Dialog */}
+      <AlertDialog open={!!deviceToUnpair} onOpenChange={(open) => !open && setDeviceToUnpair(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Desvinculação</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja desvincular o dispositivo <strong>{deviceToUnpair?.name}</strong>?
+              <br />
+              <br />
+              O dispositivo voltará ao status PENDENTE e precisará ser emparelhado novamente. As configurações de filas serão removidas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUnpairing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUnpairDevice}
+              disabled={isUnpairing}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isUnpairing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Desvinculando...
+                </>
+              ) : (
+                'Desvincular'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deviceToDelete} onOpenChange={(open) => !open && setDeviceToDelete(null)}>
@@ -470,6 +588,14 @@ export function DeviceManagement() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Configurar Filas do Painel</DialogTitle>
+            <DialogDescription>
+              {selectedDeviceName && (
+                <span>Dispositivo: <span className="font-semibold">{selectedDeviceName}</span></span>
+              )}
+              {!selectedDeviceName && (
+                <span>Selecione as filas que deseja exibir neste painel TV</span>
+              )}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 mt-4">
@@ -495,7 +621,7 @@ export function DeviceManagement() {
                   >
                     <input
                       type="checkbox"
-                      checked={selectedQueueIds.includes(queue.id)}
+                      checked={selectedQueueIds?.includes(queue.id) || false}
                       onChange={() => toggleQueue(queue.id)}
                       className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                     />
@@ -511,7 +637,7 @@ export function DeviceManagement() {
             <div className="flex space-x-2 pt-4">
               <Button
                 onClick={handleSaveQueues}
-                disabled={isSavingQueues || selectedQueueIds.length === 0}
+                disabled={isSavingQueues || !selectedQueueIds || selectedQueueIds.length === 0}
                 className="flex-1"
               >
                 {isSavingQueues ? (

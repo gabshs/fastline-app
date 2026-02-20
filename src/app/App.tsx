@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useAuth, useNavigation } from '@/hooks';
+import { useState, useEffect } from 'react';
+import { useAuth, useNavigation, useTokenRefresh } from '@/hooks';
 import { LoginScreen, RegisterScreen } from '@/features/auth';
 import {
   AdminDashboard,
@@ -17,18 +17,17 @@ import { LandingPage } from '@/features/landing';
 import type { AdminView } from '@/types';
 
 export default function App() {
-  console.log('🏁 App component rendering');
   const [showLanding, setShowLanding] = useState(true);
+  
+  // Enable automatic token refresh
+  useTokenRefresh();
   
   // Check URL hash for public routes (workaround for routing issues)
   const urlPath = window.location.pathname;
   const isPublicRoute = urlPath === '/tv-panel' || urlPath === '/patient';
   
-  console.log('🔎 Checking URL:', urlPath, 'isPublicRoute:', isPublicRoute);
-  
   // If it's a public route, render it directly without navigation hook
   if (isPublicRoute) {
-    console.log('✅ Direct public route detected:', urlPath);
     if (urlPath === '/tv-panel') {
       return <TVPanelPage />;
     }
@@ -39,11 +38,9 @@ export default function App() {
   
   // Get navigation state for authenticated routes
   const { activeView, navigateTo, resetNavigation } = useNavigation();
-  console.log('📱 App activeView:', activeView);
 
   // Double-check for public routes via activeView
   if (activeView === 'tv-panel' || activeView === 'patient') {
-    console.log('✅ Public route detected via activeView:', activeView);
     const renderPublicView = () => {
       switch (activeView) {
         case 'tv-panel':
@@ -57,7 +54,6 @@ export default function App() {
     return <div>{renderPublicView()}</div>;
   }
 
-  console.log('🔐 Not a public route, checking auth...');
   // Only run auth hooks if NOT on public routes
   const {
     isAuthenticated,
@@ -69,6 +65,23 @@ export default function App() {
     logout,
     switchAuthView,
   } = useAuth();
+
+  // Redirecionar usuários STAFF para Gestão de Senhas após login
+  const [hasRedirected, setHasRedirected] = useState(false);
+  
+  useEffect(() => {
+    if (isAuthenticated && currentUser && !hasRedirected) {
+      if (currentUser.roleKey === 'STAFF') {
+        navigateTo('passwords');
+      }
+      setHasRedirected(true);
+    }
+    
+    // Reset flag quando usuário faz logout
+    if (!isAuthenticated) {
+      setHasRedirected(false);
+    }
+  }, [isAuthenticated, currentUser, hasRedirected, navigateTo]);
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -150,15 +163,16 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       <Sidebar
         activeView={activeView}
         onViewChange={(view) => navigateTo(view as AdminView)}
         onLogout={handleLogout}
         userName={currentUser?.ownerName}
         tenantName={currentUser?.tenantName}
+        userRole={currentUser?.roleKey}
       />
-      <div className="flex-1">{renderView()}</div>
+      <div className="ml-72">{renderView()}</div>
     </div>
   );
 }

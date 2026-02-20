@@ -27,9 +27,12 @@ class QueueService {
    * List all queues for a specific clinic
    */
   async listQueues(clinicId: string): Promise<ApiQueue[]> {
-    const response = await apiClient.get<ListQueuesResponse>(
-      `/v1/clinics/${clinicId}/queues`
-    );
+    const response = await apiClient.get<{ queues: ApiQueue[] }>(`/v1/clinics/${clinicId}/queues`);
+    return response.queues;
+  }
+
+  async listUserQueues(clinicId: string): Promise<ApiQueue[]> {
+    const response = await apiClient.get<{ queues: ApiQueue[] }>(`/v1/clinics/${clinicId}/user-queues`);
     return response.queues || [];
   }
 

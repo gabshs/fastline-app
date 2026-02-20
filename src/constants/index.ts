@@ -1,19 +1,19 @@
 // Storage keys
 export const STORAGE_KEYS = {
-  AUTH_TOKEN: 'fastline_auth_token',
-  USERS: 'fastline_users',
-  CURRENT_USER: 'fastline_current_user',
-  CLINICS: 'fastline_clinics',
-  QUEUES: 'fastline_queues',
-  PASSWORDS: 'fastline_passwords',
+  AUTH_TOKEN: 'filapro_auth_token',
+  USERS: 'filapro_users',
+  CURRENT_USER: 'filapro_current_user',
+  CLINICS: 'filapro_clinics',
+  QUEUES: 'filapro_queues',
+  PASSWORDS: 'filapro_passwords',
 } as const;
 
 // Default values
 export const DEFAULT_USER = {
-  email: 'admin@fastline.com',
+  email: 'admin@filapro.com',
   password: 'admin123',
   ownerName: 'Administrador',
-  tenantName: 'FastLine Admin',
+  tenantName: 'FilaPro Admin',
 };
 
 // Messages

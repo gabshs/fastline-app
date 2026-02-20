@@ -23,9 +23,13 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   expiresAt: number;
   tenantId: string;
   userId: string;
+  userName: string;
+  tenantName: string;
+  roleKey: string;
 }
 
 // Clinic Types
@@ -190,6 +194,7 @@ export interface SnapshotTicket {
   id: string;
   displayCode: string;
   status: TicketStatus;
+  servicePointName?: string;
   createdAt: string;
   calledAt?: string;
 }

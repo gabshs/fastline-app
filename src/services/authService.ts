@@ -48,14 +48,17 @@ class AuthService {
 
     // Store tokens
     localStorage.setItem(API_CONFIG.TOKEN_KEY, response.accessToken);
+    localStorage.setItem('refresh_token', response.refreshToken);
+    localStorage.setItem('token_expires_at', response.expiresAt.toString());
     localStorage.setItem(API_CONFIG.TENANT_ID_KEY, response.tenantId);
     localStorage.setItem(API_CONFIG.USER_ID_KEY, response.userId);
 
-    // Get user data (for now, store email only, could fetch more from API later)
+    // Get user data from login response
     const user: User = {
       email,
-      ownerName: email.split('@')[0], // Extract name from email for now
-      tenantName: response.tenantId,
+      ownerName: response.userName,
+      tenantName: response.tenantName,
+      roleKey: response.roleKey,
     };
 
     // Save current user
@@ -86,11 +89,52 @@ class AuthService {
   }
 
   /**
+   * Refresh access token using refresh token
+   */
+  async refreshToken(): Promise<boolean> {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return false;
+
+    try {
+      const response = await apiClient.post<{ accessToken: string; expiresAt: number }>(
+        '/v1/refresh',
+        { refreshToken },
+        {},
+        false
+      );
+
+      localStorage.setItem(API_CONFIG.TOKEN_KEY, response.accessToken);
+      localStorage.setItem('token_expires_at', response.expiresAt.toString());
+      return true;
+    } catch {
+      // Refresh token expired or invalid - logout
+      this.logout();
+      return false;
+    }
+  }
+
+  /**
+   * Check if token is about to expire (within 5 minutes)
+   */
+  isTokenExpiringSoon(): boolean {
+    const expiresAt = localStorage.getItem('token_expires_at');
+    if (!expiresAt) return false;
+
+    const expirationTime = parseInt(expiresAt) * 1000; // Convert to milliseconds
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+
+    return expirationTime - now < fiveMinutes;
+  }
+
+  /**
    * Logout current user
    */
   logout(): void {
     apiClient.clearAuth();
     localStorage.removeItem('current_user');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('token_expires_at');
   }
 
   /**
@@ -112,6 +156,22 @@ class AuthService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Get user profile with service point and clinic information
+   */
+  async getUserProfile(): Promise<{
+    userId: string;
+    email: string;
+    name: string;
+    roleKey: string;
+    servicePointId?: string;
+    servicePointName?: string;
+    clinicId?: string;
+    clinicName?: string;
+  }> {
+    return await apiClient.get('/v1/profile');
   }
 }
 

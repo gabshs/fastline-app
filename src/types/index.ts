@@ -3,6 +3,7 @@ export interface User {
   email: string;
   ownerName: string;
   tenantName: string;
+  roleKey?: string;
 }
 
 export interface UserCredentials extends User {

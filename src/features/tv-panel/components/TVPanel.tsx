@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { deviceService } from '@/services';
 import type { DeviceSnapshotResponse, QueueSnapshot, TicketEvent } from '@/types/api';
 import { Loader2, Wifi, WifiOff, Users, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import filaProLogo from '@/assets/images/logo-fila-pro.svg';
 
 interface TVPanelProps {
   deviceKey: string;
@@ -15,6 +16,30 @@ export function TVPanel({ deviceKey }: TVPanelProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const previousCurrentTickets = useRef<Map<string, string>>(new Map());
+
+  // Função para anunciar senha usando Text-to-Speech
+  const announceTicket = useCallback((displayCode: string, servicePointName?: string) => {
+    if ('speechSynthesis' in window) {
+      // Cancelar qualquer anúncio anterior
+      window.speechSynthesis.cancel();
+      
+      // Criar mensagem com pausas entre palavras
+      let message = `Senha, ${displayCode.split('').join(', ')}`;
+      if (servicePointName) {
+        message += `,, ${servicePointName}`;
+      }
+      
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 0.9; // Velocidade mais lenta para melhor compreensão
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      
+      console.log('🔊 Anunciando:', message);
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
 
   const loadSnapshot = useCallback(async () => {
     try {
@@ -27,14 +52,41 @@ export function TVPanel({ deviceKey }: TVPanelProps) {
           console.log(`Queue ${q.queueId} stats:`, q.stats);
         });
       }
+      
+      // Verificar se há nova senha atual e anunciar
+      if (data.queues) {
+        data.queues.forEach(queue => {
+          if (queue.current) {
+            const previousTicketId = previousCurrentTickets.current.get(queue.queueId);
+            const currentTicketId = queue.current.id;
+            
+            // Se mudou a senha atual, anunciar
+            if (previousTicketId !== currentTicketId) {
+              console.log(`🆕 Nova senha atual na fila ${queue.queueId}:`, queue.current.displayCode);
+              announceTicket(queue.current.displayCode, queue.current.servicePointName || undefined);
+              previousCurrentTickets.current.set(queue.queueId, currentTicketId);
+            }
+          }
+        });
+      }
+      
       setSnapshot(data);
-    } catch (err) {
-      setError('Erro ao carregar dados do painel');
+    } catch (err: any) {
       console.error('Error loading snapshot:', err);
+      
+      // Se erro 401, a chave é inválida - limpar e forçar novo emparelhamento
+      if (err?.response?.status === 401 || err?.status === 401) {
+        console.log('🔑 Chave de dispositivo inválida (401). Limpando e redirecionando...');
+        localStorage.removeItem('tv_device_key');
+        window.location.href = window.location.pathname; // Recarrega sem query params
+        return;
+      }
+      
+      setError('Erro ao carregar dados do painel');
     } finally {
       setIsLoading(false);
     }
-  }, [deviceKey]);
+  }, [deviceKey, announceTicket]);
 
   useEffect(() => {
     loadSnapshot();
@@ -60,10 +112,18 @@ export function TVPanel({ deviceKey }: TVPanelProps) {
       setError(null);
     };
 
-    eventSource.onerror = (err) => {
+    eventSource.onerror = (err: any) => {
       console.error('SSE Error:', err);
       setIsConnected(false);
-      setError('Conexão perdida. Reconectando...');
+      
+      // Se erro 401, a chave é inválida - limpar e forçar novo emparelhamento
+      if (err?.status === 401 || eventSource.readyState === EventSource.CLOSED) {
+        console.log('🔑 Conexão SSE falhou (possível 401). Verificando autenticação...');
+        // Tentar carregar snapshot para confirmar se é 401
+        loadSnapshot();
+      } else {
+        setError('Conexão perdida. Reconectando...');
+      }
     };
 
     eventSource.addEventListener('ticket.created', (event) => {
@@ -150,26 +210,32 @@ export function TVPanel({ deviceKey }: TVPanelProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 p-8">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-5xl font-bold text-white mb-2">FastLine</h1>
-          <p className="text-xl text-blue-200">Painel de Senhas</p>
+    <div className="h-screen overflow-hidden bg-gradient-to-b from-[#0A0F1A] to-[#050810] p-4 flex flex-col">
+      {/* Header com logo discreta */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-6">
+          <img 
+            src={filaProLogo} 
+            alt="FilaPro" 
+            className="w-48 h-auto opacity-90"
+          />
+          <div className="border-l border-slate-700 pl-6">
+            <p className="text-4xl text-slate-400">Painel de Senhas</p>
+          </div>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-6">
           {isConnected ? (
-            <div className="flex items-center text-green-300">
-              <Wifi className="w-6 h-6 mr-2" />
-              <span className="text-lg">Conectado</span>
+            <div className="flex items-center text-green-400">
+              <Wifi className="w-5 h-5 mr-2" />
+              <span className="text-sm">Conectado</span>
             </div>
           ) : (
-            <div className="flex items-center text-yellow-300">
-              <WifiOff className="w-6 h-6 mr-2" />
-              <span className="text-lg">Reconectando...</span>
+            <div className="flex items-center text-amber-400">
+              <WifiOff className="w-5 h-5 mr-2" />
+              <span className="text-sm">Reconectando...</span>
             </div>
           )}
-          <div className="text-white text-2xl font-mono">
+          <div className="text-slate-300 text-4xl font-mono">
             {currentTime.toLocaleTimeString('pt-BR')}
           </div>
         </div>
@@ -177,7 +243,7 @@ export function TVPanel({ deviceKey }: TVPanelProps) {
 
       {/* Queues Grid */}
       {snapshot && snapshot.queues.length > 0 ? (
-        <div className={`grid gap-8 ${
+        <div className={`grid gap-4 flex-1 overflow-hidden mt-2 ${
           snapshot.queues.length === 1 
             ? 'grid-cols-1' 
             : snapshot.queues.length === 2 
@@ -206,78 +272,74 @@ interface QueuePanelProps {
 
 function QueuePanel({ queue, formatTime, currentTime }: QueuePanelProps) {
   // currentTime is used to trigger re-renders every second
+  // Se não há senha atual, mostrar a primeira das últimas chamadas
+  const displayTicket = queue.current || (queue.recentCalled && queue.recentCalled.length > 0 ? queue.recentCalled[0] : null);
+  
   return (
-    <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-      {/* Current Ticket - Large Display */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-12 text-white">
-        <p className="text-3xl mb-6 opacity-90">Senha Atual</p>
-        {queue.current ? (
+    <div className="bg-slate-800/40 backdrop-blur-sm rounded-xl shadow-2xl overflow-hidden border border-slate-700/50">
+      {/* Current Ticket - Large Display - Azul escuro */}
+      <div className="bg-gradient-to-br from-[#1E3A5F] to-[#0F2847] p-8 text-white">
+        <p className="text-5xl mb-6 text-slate-300 font-medium">Senha Atual</p>
+        {displayTicket ? (
           <>
-            <p className="text-[12rem] font-bold mb-6 tracking-wider text-center leading-none">
-              {queue.current.displayCode}
+            <p className="text-[14rem] font-bold mb-6 tracking-wider text-center leading-none">
+              {displayTicket.displayCode}
             </p>
-            <p className="text-2xl text-center opacity-90">
+            {displayTicket.servicePointName && (
+              <p className="text-8xl text-center font-bold mb-4 text-blue-300">
+                {displayTicket.servicePointName}
+              </p>
+            )}
+            <p className="text-4xl text-center text-slate-300">
               {(() => {
-                const timestamp = queue.current.calledAt || queue.current.createdAt;
+                const timestamp = displayTicket.calledAt || displayTicket.createdAt;
                 console.log('🕐 Timestamp para formatTime:', timestamp, 'Parsed:', new Date(timestamp));
                 return `Chamada ${formatTime(timestamp)}`;
               })()}
             </p>
           </>
         ) : (
-          <div className="text-center py-16">
-            <p className="text-5xl opacity-70">Aguardando...</p>
+          <div className="text-center py-12">
+            <p className="text-6xl text-slate-400">Aguardando...</p>
           </div>
         )}
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-3 gap-4 p-6 bg-gray-50">
+      {/* Statistics - Cores semânticas */}
+      <div className="grid grid-cols-3 gap-4 p-6 bg-slate-800/60">
         <div className="text-center">
-          <p className="text-sm text-gray-600 mb-1">Aguardando</p>
-          <p className="text-3xl font-bold text-blue-600">{queue.stats.waitingCount}</p>
+          <p className="text-lg text-slate-400 mb-2 uppercase tracking-wide">Aguardando</p>
+          <p className="text-5xl font-bold text-blue-400">{queue.stats.waitingCount}</p>
         </div>
         <div className="text-center">
-          <p className="text-sm text-gray-600 mb-1">Em Atendimento</p>
-          <p className="text-3xl font-bold text-green-600">{queue.stats.inServiceCount}</p>
+          <p className="text-lg text-slate-400 mb-2 uppercase tracking-wide">Em Atendimento</p>
+          <p className="text-5xl font-bold text-green-400">{queue.stats.inServiceCount}</p>
         </div>
         <div className="text-center">
-          <p className="text-sm text-gray-600 mb-1">Tempo Estimado</p>
-          <p className="text-3xl font-bold text-orange-600 flex items-center justify-center">
-            <Clock className="w-6 h-6 mr-2" />
+          <p className="text-lg text-slate-400 mb-2 uppercase tracking-wide">Tempo Estimado</p>
+          <p className="text-5xl font-bold text-amber-400 flex items-center justify-center">
+            <Clock className="w-8 h-8 mr-2" />
             {queue.stats.etaMinutes}min
           </p>
         </div>
       </div>
 
-      {/* Waiting Queue */}
-      {queue.waitingTop && queue.waitingTop.length > 0 && (
-        <div className="p-6 border-t">
-          <h3 className="text-xl font-semibold mb-4 text-gray-800">Próximas Senhas</h3>
-          <div className="grid grid-cols-5 gap-3">
-            {queue.waitingTop.slice(0, 10).map((ticket) => (
-              <div
-                key={ticket.id}
-                className="bg-blue-50 rounded-lg p-3 text-center border-2 border-blue-200"
-              >
-                <p className="text-2xl font-bold text-blue-700">{ticket.displayCode}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Recent Called */}
       {queue.recentCalled && queue.recentCalled.length > 0 && (
-        <div className="p-6 border-t bg-gray-50">
-          <h3 className="text-lg font-semibold mb-3 text-gray-700">Últimas Chamadas</h3>
-          <div className="flex flex-wrap gap-2">
-            {queue.recentCalled.slice(0, 5).map((ticket) => (
+        <div className="p-6 border-t border-slate-700/50 bg-slate-800/40">
+          <h3 className="text-3xl font-semibold mb-5 text-slate-400 uppercase tracking-wide">Últimas Chamadas</h3>
+          <div className="flex flex-wrap gap-5">
+            {queue.recentCalled.slice(0, 3).map((ticket) => (
               <div
                 key={ticket.id}
-                className="bg-gray-200 rounded px-3 py-1 text-gray-700 font-medium"
+                className="bg-slate-700/60 rounded-lg px-10 py-6 text-slate-300 font-medium"
               >
-                {ticket.displayCode}
+                <div className="flex items-center gap-5">
+                  <span className="text-6xl font-bold">{ticket.displayCode}</span>
+                  {ticket.servicePointName && (
+                    <span className="text-4xl font-semibold text-blue-300">→ {ticket.servicePointName}</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

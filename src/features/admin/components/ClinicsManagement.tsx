@@ -7,10 +7,13 @@ import { Label } from '@/shared/ui/label';
 import { useClinics } from '@/hooks/useClinics';
 
 export function ClinicsManagement() {
-  const { clinics, isLoading, createClinic } = useClinics();
+  const { clinics, isLoading, createClinic, updateClinic, deleteClinic } = useClinics();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedClinic, setSelectedClinic] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     timezone: 'America/Sao_Paulo',
@@ -32,6 +35,57 @@ export function ClinicsManagement() {
     if (success) {
       setFormData({ name: '', timezone: 'America/Sao_Paulo', addressLine: '' });
       setIsDialogOpen(false);
+    }
+  };
+
+  const handleEdit = (clinic: typeof clinics[0]) => {
+    setSelectedClinic({ id: clinic.id, name: clinic.name });
+    setFormData({
+      name: clinic.name,
+      timezone: clinic.timezone,
+      addressLine: clinic.addressLine || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClinic) return;
+    
+    setIsSubmitting(true);
+    
+    const success = await updateClinic(selectedClinic.id, {
+      name: formData.name,
+      timezone: formData.timezone,
+      addressLine: formData.addressLine || undefined,
+    });
+    
+    setIsSubmitting(false);
+    
+    if (success) {
+      setFormData({ name: '', timezone: 'America/Sao_Paulo', addressLine: '' });
+      setSelectedClinic(null);
+      setIsEditDialogOpen(false);
+    }
+  };
+
+  const handleDeleteClick = (clinic: typeof clinics[0]) => {
+    setSelectedClinic({ id: clinic.id, name: clinic.name });
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedClinic) return;
+    
+    setIsSubmitting(true);
+    
+    const success = await deleteClinic(selectedClinic.id);
+    
+    setIsSubmitting(false);
+    
+    if (success) {
+      setSelectedClinic(null);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -145,10 +199,18 @@ export function ClinicsManagement() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4 text-gray-600" />
+                        <button 
+                          onClick={() => handleEdit(clinic)}
+                          className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Editar clínica"
+                        >
+                          <Edit className="w-4 h-4 text-blue-600" />
                         </button>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                          onClick={() => handleDeleteClick(clinic)}
+                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Excluir clínica"
+                        >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </button>
                       </div>
@@ -160,6 +222,116 @@ export function ClinicsManagement() {
           </div>
         )}
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Clínica</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="edit-name">Nome da Clínica</Label>
+              <Input
+                id="edit-name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Ex: Clínica São Paulo"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-timezone">Fuso Horário</Label>
+              <Input
+                id="edit-timezone"
+                value={formData.timezone}
+                onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                placeholder="America/Sao_Paulo"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-addressLine">Endereço (opcional)</Label>
+              <Input
+                id="edit-addressLine"
+                value={formData.addressLine}
+                onChange={(e) => setFormData({ ...formData, addressLine: e.target.value })}
+                placeholder="Ex: Av. Paulista, 1000"
+              />
+            </div>
+            <div className="flex space-x-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setFormData({ name: '', timezone: 'America/Sao_Paulo', addressLine: '' });
+                  setSelectedClinic(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar Alterações'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-gray-600">
+              Tem certeza que deseja excluir a clínica <strong>{selectedClinic?.name}</strong>?
+            </p>
+            <p className="text-sm text-red-600">
+              Esta ação não pode ser desfeita. Todas as filas e dados associados a esta clínica serão perdidos.
+            </p>
+            <div className="flex space-x-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setIsDeleteDialogOpen(false);
+                  setSelectedClinic(null);
+                }}
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="button" 
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={handleDeleteConfirm}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  'Excluir Clínica'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

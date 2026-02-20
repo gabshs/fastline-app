@@ -50,6 +50,20 @@ class DeviceService {
   }
 
   /**
+   * Unpair a device (remove pairing but keep device in system)
+   */
+  async unpairDevice(clinicId: string, deviceId: string): Promise<void> {
+    await apiClient.post(`/v1/clinics/${clinicId}/devices/${deviceId}/unpair`, {});
+  }
+
+  /**
+   * Unpair self (device disconnects itself using its API key)
+   */
+  async unpairSelf(deviceKey: string): Promise<void> {
+    await apiClient.postPublic(`/v1/device/${encodeURIComponent(deviceKey)}/unpair`, {});
+  }
+
+  /**
    * Set device subscriptions (which queues to monitor)
    */
   async setSubscriptions(
@@ -61,6 +75,27 @@ class DeviceService {
       `/v1/clinics/${clinicId}/devices/${deviceId}/subscriptions`,
       data
     );
+  }
+
+  /**
+   * Get device subscribed queues
+   */
+  async getDeviceQueues(clinicId: string, deviceId: string): Promise<string[]> {
+    const response = await apiClient.get<{ queueIds: string[] }>(
+      `/v1/clinics/${clinicId}/devices/${deviceId}/queues`
+    );
+    return response.queueIds;
+  }
+
+  /**
+   * Regenerate pairing code for a device
+   */
+  async regeneratePairingCode(clinicId: string, deviceId: string): Promise<string> {
+    const response = await apiClient.post<{ pairingCode: string }>(
+      `/v1/clinics/${clinicId}/devices/${deviceId}/regenerate-code`,
+      {}
+    );
+    return response.pairingCode;
   }
 
   /**
@@ -76,7 +111,7 @@ class DeviceService {
   ): Promise<DeviceSnapshotResponse> {
     // Use getPublic since this route uses deviceKey in URL for auth, not JWT
     const response = await apiClient.getPublic<DeviceSnapshotResponse>(
-      `/v1/device/${deviceKey}/snapshot?waitingLimit=${waitingLimit}&recentLimit=${recentLimit}`
+      `/v1/device/${encodeURIComponent(deviceKey)}/snapshot?waitingLimit=${waitingLimit}&recentLimit=${recentLimit}`
     );
     return response;
   }
@@ -87,7 +122,7 @@ class DeviceService {
    */
   createEventSource(deviceKey: string): EventSource {
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-    return new EventSource(`${baseUrl}/v1/device/${deviceKey}/events`);
+    return new EventSource(`${baseUrl}/v1/device/${encodeURIComponent(deviceKey)}/events`);
   }
 }
 

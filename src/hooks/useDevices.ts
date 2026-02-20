@@ -28,8 +28,40 @@ export function useDevices(clinicId: string | null) {
   }, [clinicId]);
 
   useEffect(() => {
-    loadDevices();
-  }, [loadDevices]);
+    if (!clinicId) {
+      setDevices([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const data = await deviceService.listDevices(clinicId);
+        if (isMounted) {
+          setDevices(data);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError('Erro ao carregar dispositivos');
+          console.error('Error loading devices:', err);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clinicId]);
 
   return {
     devices,

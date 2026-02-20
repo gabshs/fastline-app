@@ -7,9 +7,10 @@ import { Button } from '@/shared/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/ui/dialog';
 import { Label } from '@/shared/ui/label';
-import { useClinics, useQueues, useTickets } from '@/hooks';
+import { useClinics, useUserQueues, useTickets } from '@/hooks';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { authService } from '@/services';
 
 const PRIORITY_CONFIG = {
   NORMAL: { label: 'Normal', color: 'bg-gray-100 text-gray-800' },
@@ -20,8 +21,9 @@ const PRIORITY_CONFIG = {
 export function PasswordsManagement() {
   const { clinics, isLoading: isLoadingClinics } = useClinics();
   const [selectedClinicId, setSelectedClinicId] = useState<string | null>(null);
-  const { queues, isLoading: isLoadingQueues } = useQueues(selectedClinicId);
+  const { queues, isLoading: isLoadingQueues } = useUserQueues(selectedClinicId);
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
+  const [userServicePointId, setUserServicePointId] = useState<string | null>(null);
   
   const {
     tickets,
@@ -39,28 +41,51 @@ export function PasswordsManagement() {
 
   const [isCalling, setIsCalling] = useState(false);
   const [actioningTicketId, setActioningTicketId] = useState<string | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  
+  // Buscar perfil completo do usuário logado
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        const profile = await authService.getUserProfile();
+        
+        // Se for STAFF e tiver service_point_id, auto-selecionar clínica
+        if (profile.roleKey === 'STAFF' && profile.servicePointId && profile.clinicId) {
+          setUserServicePointId(profile.servicePointId);
+          setSelectedClinicId(profile.clinicId);
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+    
+    loadUserProfile();
+  }, []);
+  
+  // Auto-selecionar fila se houver apenas uma disponível para STAFF
+  useEffect(() => {
+    if (userServicePointId && queues.length === 1 && !selectedQueueId) {
+      setSelectedQueueId(queues[0].id);
+    }
+  }, [queues, userServicePointId, selectedQueueId]);
   
   // Create ticket dialog
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newTicketPriority, setNewTicketPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
 
-  // Auto-select first clinic and queue if available
+  // Reset queue selection when clinic changes (apenas para não-STAFF)
   useEffect(() => {
-    if (!selectedClinicId && clinics.length > 0) {
-      setSelectedClinicId(clinics[0].id);
+    if (!userServicePointId) {
+      setSelectedQueueId(null);
     }
-  }, [clinics, selectedClinicId]);
-
-  useEffect(() => {
-    if (!selectedQueueId && queues.length > 0) {
-      setSelectedQueueId(queues[0].id);
-    }
-  }, [queues, selectedQueueId]);
+  }, [selectedClinicId, userServicePointId]);
 
   const handleCallNext = async () => {
     setIsCalling(true);
-    await callNext();
+    await callNext(userServicePointId || undefined);
     setIsCalling(false);
   };
 
@@ -102,138 +127,190 @@ export function PasswordsManagement() {
         <p className="text-gray-600">Chame e gerencie as senhas de atendimento</p>
       </div>
 
-      {/* Clinic and Queue Selectors */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium">Seleção de Fila</h3>
-          {selectedClinicId && selectedQueueId && (
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nova Senha
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Criar Nova Senha</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 mt-4">
-                  <div>
-                    <Label htmlFor="priority">Prioridade</Label>
-                    <Select 
-                      value={newTicketPriority} 
-                      onValueChange={(value: 'NORMAL' | 'HIGH' | 'URGENT') => setNewTicketPriority(value)}
-                    >
-                      <SelectTrigger id="priority">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NORMAL">
-                          <div className="flex items-center space-x-2">
-                            <span className="w-3 h-3 rounded-full bg-gray-400"></span>
-                            <span>Normal</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="HIGH">
-                          <div className="flex items-center space-x-2">
-                            <span className="w-3 h-3 rounded-full bg-orange-400"></span>
-                            <span>Alta</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="URGENT">
-                          <div className="flex items-center space-x-2">
-                            <span className="w-3 h-3 rounded-full bg-red-400"></span>
-                            <span>Urgente</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-gray-500 mt-2">
-                      A senha será criada automaticamente com o próximo número disponível
-                    </p>
+      {/* Clinic Selector - Oculto para STAFF */}
+      {!userServicePointId && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <Label className="text-base mb-3 block">
+            Selecione a Clínica
+          </Label>
+          {isLoadingClinics ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+            </div>
+          ) : clinics.length === 0 ? (
+            <div className="text-center py-8">
+              <Building2 className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+              <p className="text-gray-600">Nenhuma clínica cadastrada</p>
+              <p className="text-sm text-gray-500 mt-2">Cadastre uma clínica primeiro</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clinics.map((clinic) => (
+                <button
+                  key={clinic.id}
+                  onClick={() => setSelectedClinicId(clinic.id)}
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    selectedClinicId === clinic.id
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${
+                      selectedClinicId === clinic.id ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}>
+                      <Building2 className={`w-5 h-5 ${
+                        selectedClinicId === clinic.id ? 'text-white' : 'text-gray-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{clinic.name}</p>
+                      <p className="text-sm text-gray-500 truncate">{clinic.timezone}</p>
+                    </div>
                   </div>
-                  <Button 
-                    onClick={handleCreateTicket} 
-                    className="w-full"
-                    disabled={isCreating}
-                  >
-                    {isCreating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Criando...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Criar Senha
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </button>
+              ))}
+            </div>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm mb-2 text-gray-600 font-medium">Clínica</label>
-            {isLoadingClinics ? (
-              <div className="flex items-center justify-center h-10">
-                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-              </div>
-            ) : (
-              <Select value={selectedClinicId || ''} onValueChange={setSelectedClinicId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma clínica" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clinics.map((clinic) => (
-                    <SelectItem key={clinic.id} value={clinic.id}>
-                      <div className="flex items-center space-x-2">
-                        <Building2 className="w-4 h-4" />
-                        <span>{clinic.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm mb-2 text-gray-600 font-medium">Fila</label>
-            {isLoadingQueues ? (
-              <div className="flex items-center justify-center h-10">
-                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-              </div>
-            ) : (
-              <Select 
-                value={selectedQueueId || ''} 
-                onValueChange={setSelectedQueueId}
-                disabled={!selectedClinicId || queues.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma fila" />
-                </SelectTrigger>
-                <SelectContent>
-                  {queues.map((queue) => (
-                    <SelectItem key={queue.id} value={queue.id}>
-                      {queue.name} ({queue.prefix})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
 
-      {!selectedClinicId || !selectedQueueId ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <Key className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-gray-600 text-lg">Selecione uma clínica e fila para começar</p>
+      {/* Clínica selecionada automaticamente para STAFF */}
+      {userServicePointId && selectedClinicId && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-lg bg-blue-600">
+              <Building2 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm text-blue-600 font-medium">Clínica</p>
+              <p className="font-semibold text-gray-900">
+                {clinics.find(c => c.id === selectedClinicId)?.name}
+              </p>
+            </div>
+          </div>
         </div>
-      ) : (
+      )}
+
+      {/* Queue Selector */}
+      {selectedClinicId && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <Label className="text-base">
+              Selecione a Fila
+            </Label>
+            {selectedQueueId && (
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nova Senha
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Criar Nova Senha</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <Label htmlFor="priority">Prioridade</Label>
+                      <Select 
+                        value={newTicketPriority} 
+                        onValueChange={(value: 'NORMAL' | 'HIGH' | 'URGENT') => setNewTicketPriority(value)}
+                      >
+                        <SelectTrigger id="priority">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NORMAL">
+                            <div className="flex items-center space-x-2">
+                              <span className="w-3 h-3 rounded-full bg-gray-400"></span>
+                              <span>Normal</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="HIGH">
+                            <div className="flex items-center space-x-2">
+                              <span className="w-3 h-3 rounded-full bg-orange-400"></span>
+                              <span>Alta</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="URGENT">
+                            <div className="flex items-center space-x-2">
+                              <span className="w-3 h-3 rounded-full bg-red-400"></span>
+                              <span>Urgente</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500 mt-2">
+                        A senha será criada automaticamente com o próximo número disponível
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleCreateTicket} 
+                      className="w-full"
+                      disabled={isCreating}
+                    >
+                      {isCreating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Criando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Criar Senha
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+          {isLoadingQueues ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+            </div>
+          ) : queues.length === 0 ? (
+            <div className="text-center py-8">
+              <Key className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+              <p className="text-gray-600">Nenhuma fila disponível</p>
+              <p className="text-sm text-gray-500 mt-2">Configure filas para esta clínica primeiro</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {queues.map((queue) => (
+                <button
+                  key={queue.id}
+                  onClick={() => setSelectedQueueId(queue.id)}
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    selectedQueueId === queue.id
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${
+                      selectedQueueId === queue.id ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}>
+                      <Key className={`w-5 h-5 ${
+                        selectedQueueId === queue.id ? 'text-white' : 'text-gray-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{queue.name}</p>
+                      <p className="text-sm text-gray-500 truncate">Prefixo: {queue.prefix}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedClinicId && selectedQueueId && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             {/* Current Ticket Display */}

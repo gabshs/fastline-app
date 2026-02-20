@@ -44,7 +44,7 @@ export function PatientApp() {
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h1 className="text-3xl mb-2">FastLine</h1>
+            <h1 className="text-3xl mb-2">FilaPro</h1>
             <p className="text-gray-600">Entre na fila de forma rápida e fácil</p>
           </div>
 
